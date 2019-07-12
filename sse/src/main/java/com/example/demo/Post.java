@@ -5,25 +5,44 @@
  */
 package com.example.demo;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
-
 /**
  *
  * @author hantsy
  */
-@Data
-@ToString
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+//@Data
+//@ToString
+//@Builder
+//@NoArgsConstructor
+//@AllArgsConstructor
 class Post {
     
     private Long id;
     private String title;
     private String content;
-    
+
+    Post(Long id, String title, String content) {
+        this.id = id;
+        this.title = title;
+        this.content = content;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
 }

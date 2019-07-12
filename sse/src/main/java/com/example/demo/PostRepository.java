@@ -23,8 +23,8 @@ class PostRepository {
     private static final List<Post> DATA = new ArrayList<>();
 
     static {
-        DATA.add(Post.builder().id(1L).title("post one").content("content of post one").build());
-        DATA.add(Post.builder().id(2L).title("post two").content("content of post two").build());
+        DATA.add(new Post(1L, "post one", "content of post one"));
+        DATA.add(new Post(2L, "post two", "content of post two"));
     }
 
     Flux<Post> findAll() {
@@ -36,10 +36,10 @@ class PostRepository {
     }
 
     Mono<Post> save(Post post) {
-        long id = DATA.size() + 1;
-        Post saved = Post.builder().id(id).title(post.getTitle()).content(post.getContent()).build();
-        DATA.add(saved);
-        return Mono.just(saved);
+//        long id = DATA.size() + 1;
+//        Post saved = Post.builder().id(id).title(post.getTitle()).content(post.getContent()).build();
+        DATA.add(post);
+        return Mono.just(post);
     }
 
 }

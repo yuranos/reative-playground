@@ -30,18 +30,28 @@ class PostController {
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
     public Flux<Post> all() {
-        return this.posts.findAll();
+//        Flux<Integer> ints = Flux.range(1, 4)
+//                .map(i -> {
+//                    if (i <= 3) return i;
+//                    throw new RuntimeException("Got to 4");
+//                });
+//        ints.subscribe(System.out::println,
+//                error
+//                        -> System.err.println("Error: " + error));
+//        return this.posts.findAll();
+        return Flux.interval(Duration.ofSeconds(1L))
+                .take(10).flatMap((oneSecond) -> this.posts.findAll());
     }
 
     @GetMapping(produces = MediaType.APPLICATION_STREAM_JSON_VALUE)
     public Flux<Post> stream() {
-        return Flux.interval(Duration.ofSeconds(1L)).flatMap((oneSecond) -> this.posts.findAll());
+        return Flux.interval(Duration.ofSeconds(10L)).flatMap((oneSecond) -> this.posts.findAll());
     }
 
     @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<Post> sse() {
         return Flux
-                .zip(Flux.interval(Duration.ofSeconds(1)), this.posts.findAll().repeat())
+                .zip(Flux.interval(Duration.ofSeconds(10L)), this.posts.findAll().repeat())
                 .map(Tuple2::getT2);
     }
 
