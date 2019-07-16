@@ -155,6 +155,10 @@
                             <goal>compile</goal>
                         </goals>
                         <configuration>
+                            <args>
+                                <arg>-Xjsr305=strict</arg> <!-- Enable strict mode for JSR-305 annotations -->
+                                <arg>-Xnew-inference</arg> <!-- Enable strict mode for JSR-305 annotations -->
+                            </args>
                             <sourceDirs>
                                 <source>src/main/java</source>
                                 <source>src/main/kotlin</source>
