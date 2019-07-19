@@ -12,6 +12,8 @@ import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.web.reactive.config.EnableWebFlux;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
+import reactor.core.Exceptions;
+import reactor.core.publisher.Flux;
 import reactor.netty.http.server.HttpServer;
 
 @Configuration
@@ -36,6 +38,19 @@ public class Application {
         ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(handler);
         HttpServer httpServer = HttpServer.create().host("localhost").port(this.port);
         return httpServer.handle(adapter);
+    }
+
+
+    public void method() {
+        Flux<String> flux =
+                Flux.<String>error(new IllegalArgumentException())
+                        .retryWhen(companion -> companion
+                                .zipWith(Flux.range(1, 4),
+                                        (error, index) -> {
+                                            if (index < 4) return index;
+                                            else throw Exceptions.propagate(error);
+                                        })
+                        );
     }
 
 }

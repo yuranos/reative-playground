@@ -1,12 +1,14 @@
 package com.yuranos.reactive
 
-import org.reactivestreams.Subscription
 import reactor.core.Exceptions
-import reactor.core.publisher.BaseSubscriber
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
+import reactor.core.publisher.TopicProcessor
+import reactor.core.publisher.UnicastProcessor
 import reactor.core.scheduler.Schedulers
+import reactor.test.StepVerifier
+import java.io.IOException
 import java.time.Duration
-import java.util.function.BiFunction
 
 
 fun main() {
@@ -126,39 +128,164 @@ fun main() {
 
                 Thread.sleep(2100)
             }
+
+        Flux
+            .error<String>(IllegalArgumentException())
+            .doOnError { println(it) }
+            .retryWhen { companion -> companion.take(3) }
+            .subscribe()
+
+
+
+
+        Flux.error<String>(IllegalArgumentException())
+            .retryWhen { companion ->
+                companion
+                    .zipWith(Flux.range(1, 4),
+                        { error, index ->
+                            if (index < 4)
+                                index
+                            else
+                                throw Exceptions.propagate(error)
+                        })
+            }.subscribe()
+
+        //Generator
+//    Generally, these operators are made to bridge APIs that are not reactive,
+//    providing a "sink" that is similar in concept to a Processor in the sense that
+//    it lets you manually populate the sequence with data or terminate it).?
+        val flux = Flux.generate(
+            { 0 },
+            { state, sink ->
+                sink.next("3 x " + state + " = " + 3 * state)
+                if (state == 10) sink.complete()
+                state + 1
+            }).subscribe {
+            println("Good for sequential, blocking subscription: $it")
+        }
+
+
+//    Exception Handling
+        val converted = Flux
+            .range(1, 10)
+            .map {
+                try {
+                    convert(it)
+                } catch (e: IOException) {
+                    throw Exceptions.propagate(e)
+                }
+            }
+
+        converted.subscribe(
+            { v -> println("RECEIVED: $v") },
+            { e ->
+                if (Exceptions.unwrap(e) is IOException) {
+                    println("Something bad happened with I/O")
+                } else {
+                    println("Something bad happened")
+                }
+            }
+        )
+
+        //Processors
+        //UnicastProcessor - one subscriber, has internal buffer.
+        val processor = UnicastProcessor.create<Int>()
+        processor.subscribe {
+            println("First$it")
+        }
+        //Failing with: IllegalStateException: UnicastProcessor allows only a single Subscriber
+//    processor.subscribe {
+//        println("Second$it")
+//    }
+        //Two sinks can emit events to the same Processor
+        val sink = processor.sink()
+        sink.next(1)
+        sink.next(1)
+
+        val sink2 = processor.sink()
+        sink2.next(2)
+        sink2.next(2)
+
+        sink.next(1)
+        sink.next(1)
+
+
+        //TopicProcessor - async
+        val topicProcessor = TopicProcessor.create<Int>()
+        topicProcessor.subscribe {
+            println("First$it")
+        }
+//    Works fine
+        topicProcessor.subscribe {
+            println("Second$it")
+        }
+
+
+        //Two sinks can emit events to the same Processor
+        val sink3 = topicProcessor.sink()
+        sink3.next(1)
+        sink3.next(1)
+
+        val sink4 = topicProcessor.sink()
+        sink4.next(2)
+        sink4.next(2)
+
+        sink3.next(1)
+        sink3.next(1)
+
     }
 
-    Flux
-        .error<String>(IllegalArgumentException())
-        .doOnError { println(it) }
-        .retryWhen { companion -> companion.take(3) }
-        .subscribe()
+
+    //Testing
+    val sut = Flux.just(
+        "Ok", "Good", "Worse", java.lang.IllegalArgumentException()
+    )
+
+//    StepVerifier
+//        .create(sut)
+//        .expectNext("Ok")
+//        .expectNext("Good")
+//        .expectNext("Worse")
+//        .verifyError()
 
 
-    Flux.error<String>(IllegalArgumentException())
-        .retryWhen { companion ->
-            companion
-                .zipWith(Flux.range(1, 4),
-                    BiFunction<Throwable, Int, Int> { error, index ->
-                        if (index < 4)
-                            return@BiFunction index
-                        else
-                            throw Exceptions.propagate(error)
-                    })
-        }.subscribe()
+    StepVerifier
+        .withVirtualTime {
+            Mono.delay(Duration.ofDays(1))
+        }
+        .expectNext(0L)
+        .verifyComplete()
+//        .expectErrorMessage("boom")
+//        .verify()
+
+
+//    val flux = Flux.just(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L)
+//    StepVerifier.create(flux)
+//        .expectNext(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L)
+//        .expectComplete()
+//        .verify()
+
 
 }
 
-class SampleSubscriber<T> : BaseSubscriber<T>() {
-
-    override fun hookOnSubscribe(subscription: Subscription) {
-        println("Still subscribed")
-        request(1)
+@Throws(IOException::class)
+fun convert(i: Int): String {
+    if (i > 3) {
+        throw IOException("boom $i")
     }
-
-    public override fun hookOnNext(value: T?) {
-        println("Still onNexting")
-        println(value)
-        request(1)
-    }
+    return "OK $i"
 }
+
+//class SampleSubscriber<T> : BaseSubscriber<T>() {
+//
+//    override fun hookOnSubscribe(subscription: Subscription) {
+//        println("Still subscribed")
+//        request(1)
+//    }
+//
+//    public override fun hookOnNext(value: T?) {
+//        println("Still onNexting")
+//        println(value)
+//        request(1)
+//    }
+//}
