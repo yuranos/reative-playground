@@ -1,5 +1,6 @@
 package com.yuranos.reactive
 
+import org.reactivestreams.Publisher
 import reactor.core.Exceptions
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
@@ -7,8 +8,12 @@ import reactor.core.publisher.TopicProcessor
 import reactor.core.publisher.UnicastProcessor
 import reactor.core.scheduler.Schedulers
 import reactor.test.StepVerifier
+import reactor.test.publisher.TestPublisher
 import java.io.IOException
 import java.time.Duration
+import reactor.test.publisher.PublisherProbe
+
+
 
 
 fun main() {
@@ -233,13 +238,11 @@ fun main() {
         sink3.next(1)
         sink3.next(1)
 
-    }
 
-
-    //Testing
-    val sut = Flux.just(
-        "Ok", "Good", "Worse", java.lang.IllegalArgumentException()
-    )
+        //Testing
+        val sut = Flux.just(
+            "Ok", "Good", "Worse", java.lang.IllegalArgumentException()
+        )
 
 //    StepVerifier
 //        .create(sut)
@@ -249,12 +252,12 @@ fun main() {
 //        .verifyError()
 
 
-    StepVerifier
-        .withVirtualTime {
-            Mono.delay(Duration.ofDays(1))
-        }
-        .expectNext(0L)
-        .verifyComplete()
+        StepVerifier
+            .withVirtualTime {
+                Mono.delay(Duration.ofDays(1))
+            }
+            .expectNext(0L)
+            .verifyComplete()
 //        .expectErrorMessage("boom")
 //        .verify()
 
@@ -266,14 +269,58 @@ fun main() {
 //        .verify()
 
 
+    }
+
+//    val publisher = TestPublisher.createNoncompliant(TestPublisher.Violation.ALLOW_NULL,
+//        TestPublisher.Violation.REQUEST_OVERFLOW).next(1)
+
+    val publisher = TestPublisher.create().next(1)
+    val faultyFlux = publisher.flux()
+    faultyFlux.subscribe {
+        println(it)
+    }
+    publisher.next(2).next(3).assertCancelled()
+
+
 }
 
-@Throws(IOException::class)
-fun convert(i: Int): String {
-    if (i > 3) {
-        throw IOException("boom $i")
-    }
-    return "OK $i"
+
+
+fun testEmptyPathIsUsed() {
+    StepVerifier.create(processOrFallback(Mono.empty(), Mono.just("EMPTY_PHRASE")))
+        .expectNext("EMPTY_PHRASE")
+        .verifyComplete()
+}
+
+fun testCommandEmptyPathIsUsed() {
+    //probe will allow us to capture the state of the reactive execution
+    val probe = PublisherProbe.empty<Void>()
+
+    StepVerifier.create(processOrFallback(Mono.empty(), probe.mono()))
+        .verifyComplete()
+
+    probe.assertWasSubscribed()
+    probe.assertWasRequested()
+    probe.assertWasNotCancelled()
+}
+
+
+fun processOrFallback(commandSource: Mono<String>, doWhenEmpty: Mono<Void>): Mono<Void> {
+    return commandSource
+        .flatMap { command -> executeCommand(command).then() }
+        //then() will return Mono<Void> which is no different from an empty result.
+        // We need to be able to distinguish between empty command and Mono<Void>
+        .switchIfEmpty(doWhenEmpty)
+}
+
+fun processOrFallback(source: Mono<String>, fallback: Publisher<String>): Flux<String> {
+    return source
+        .flatMapMany { phrase -> Flux.fromArray(phrase.split("\\s+").toTypedArray()) }
+        .switchIfEmpty(fallback)
+}
+
+private fun executeCommand(command: String): Mono<String> {
+    return Mono.just("$command DONE")
 }
 
 //class SampleSubscriber<T> : BaseSubscriber<T>() {
@@ -289,3 +336,12 @@ fun convert(i: Int): String {
 //        request(1)
 //    }
 //}
+
+
+@Throws(IOException::class)
+fun convert(i: Int): String {
+    if (i > 3) {
+        throw IOException("boom $i")
+    }
+    return "OK $i"
+}
