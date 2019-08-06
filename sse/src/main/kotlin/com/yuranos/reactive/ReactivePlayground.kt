@@ -3,17 +3,18 @@ package com.yuranos.reactive
 import org.reactivestreams.Publisher
 import reactor.core.Exceptions
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Hooks
 import reactor.core.publisher.Mono
 import reactor.core.publisher.TopicProcessor
 import reactor.core.publisher.UnicastProcessor
 import reactor.core.scheduler.Schedulers
 import reactor.test.StepVerifier
+import reactor.test.publisher.PublisherProbe
 import reactor.test.publisher.TestPublisher
 import java.io.IOException
 import java.time.Duration
-import reactor.test.publisher.PublisherProbe
-
-
+import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 
 fun main() {
@@ -269,21 +270,65 @@ fun main() {
 //        .verify()
 
 
-    }
-
 //    val publisher = TestPublisher.createNoncompliant(TestPublisher.Violation.ALLOW_NULL,
 //        TestPublisher.Violation.REQUEST_OVERFLOW).next(1)
 
-    val publisher = TestPublisher.create().next(1)
-    val faultyFlux = publisher.flux()
-    faultyFlux.subscribe {
-        println(it)
+        val publisher = TestPublisher.create().next(1)
+        val faultyFlux = publisher.flux()
+        faultyFlux.subscribe {
+            println(it)
+        }
+        publisher.next(2).next(3).assertCancelled()
+
+        //Debugging
+        //Globally changing stacktrace
+        Hooks.onOperatorDebug()
     }
-    publisher.next(2).next(3).assertCancelled()
+
+
+    //Advanced topics
+
+    //Transform vs compose
+//    Compose - lazy and for each subscriber
+    //Transform()
+    val filterAndMap1: (Flux<String>) -> Flux<String> = {
+        it.filter { color -> color != "orange" }
+            .map(String::toUpperCase)
+    }
+
+    Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
+        //prints orange as well
+        .doOnNext { println(it) }
+        .transform(filterAndMap1)
+    //no orange here
+//        .subscribe { d -> println("Subscriber to Transformed MapAndFilter: $d") }
+
+
+//    Compose()
+    val ai = AtomicInteger()
+    val filterAndMap2: (Flux<String>) -> Flux<String> = label@{
+        if (ai.incrementAndGet() == 1) {
+            return@label it.filter { color -> color != "orange" }
+                .map(String::toUpperCase)
+        }
+        //This filtering will only be done for compose(),
+        //transform() will only ever be called once for all subscribers, so it will end up in a previous expression.
+        return@label it.filter { color -> color != "purple" }
+            .map(String::toUpperCase)
+    }
+
+    val composedFlux = Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
+        .doOnNext { println(it) }
+        //Compose is called for every single subscriber. So if the function has state it will impact the produced values.
+        //It will produce BLUE-GREEN-PURPLE and then BLUE-GREEN-ORANGE
+        .compose(filterAndMap2)
+//        .transform(filterAndMap2)
+
+    composedFlux.subscribe({ d -> println("Subscriber 1 to Composed MapAndFilter :$d") })
+    composedFlux.subscribe({ d -> println("Subscriber 2 to Composed MapAndFilter: $d") })
 
 
 }
-
 
 
 fun testEmptyPathIsUsed() {
