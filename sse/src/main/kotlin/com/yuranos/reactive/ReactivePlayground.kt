@@ -379,9 +379,33 @@ fun main() {
         Thread.sleep(500)
         println("will now connect")
 
+        //Batching
+        StepVerifier.create(
+            Flux.just(1, 3, 5, 2, 4, 6, 11, 12, 13)
+                .groupBy { i -> if (i % 2 == 0) "even" else "odd" }
+                .concatMap { g ->
+                    g.defaultIfEmpty(-1) //if empty groups, show them
+                        .map { it.toString() } //map to string
+                        .startWith(g.key()) //start with the group's key
+                }
+        )
+            .expectNext("odd", "1", "3", "5", "11", "13")
+            .expectNext("even", "2", "4", "6", "12")
+            .verifyComplete()
+
+        //Parallelization
+        Flux.range(1, 10)
+            .parallel(2)
+            //This method is not available
+//        .subscribeOn()
+            .runOn(Schedulers.parallel())
+            //IMPORTANT: Note also that subscribe(Subscriber<T>) merges all the rails, while subscribe(Consumer<T>) runs all the rails.
+            .subscribe({ i -> println(Thread.currentThread().name + " -> " + i) })
+
     }
 
-    
+    //Hooks
+
 }
 
 
