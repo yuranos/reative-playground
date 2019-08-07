@@ -283,51 +283,105 @@ fun main() {
         //Debugging
         //Globally changing stacktrace
         Hooks.onOperatorDebug()
-    }
 
 
-    //Advanced topics
+        //Advanced topics
 
-    //Transform vs compose
+        //Transform vs compose
 //    Compose - lazy and for each subscriber
-    //Transform()
-    val filterAndMap1: (Flux<String>) -> Flux<String> = {
-        it.filter { color -> color != "orange" }
-            .map(String::toUpperCase)
-    }
+        //Transform()
+        val filterAndMap1: (Flux<String>) -> Flux<String> = {
+            it.filter { color -> color != "orange" }
+                .map(String::toUpperCase)
+        }
 
-    Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
-        //prints orange as well
-        .doOnNext { println(it) }
-        .transform(filterAndMap1)
-    //no orange here
+        Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
+            //prints orange as well
+            .doOnNext { println(it) }
+            .transform(filterAndMap1)
+        //no orange here
 //        .subscribe { d -> println("Subscriber to Transformed MapAndFilter: $d") }
 
 
 //    Compose()
-    val ai = AtomicInteger()
-    val filterAndMap2: (Flux<String>) -> Flux<String> = label@{
-        if (ai.incrementAndGet() == 1) {
-            return@label it.filter { color -> color != "orange" }
+        val ai = AtomicInteger()
+        val filterAndMap2: (Flux<String>) -> Flux<String> = label@{
+            if (ai.incrementAndGet() == 1) {
+                return@label it.filter { color -> color != "orange" }
+                    .map(String::toUpperCase)
+            }
+            //This filtering will only be done for compose(),
+            //transform() will only ever be called once for all subscribers, so it will end up in a previous expression.
+            return@label it.filter { color -> color != "purple" }
                 .map(String::toUpperCase)
         }
-        //This filtering will only be done for compose(),
-        //transform() will only ever be called once for all subscribers, so it will end up in a previous expression.
-        return@label it.filter { color -> color != "purple" }
-            .map(String::toUpperCase)
-    }
 
-    val composedFlux = Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
-        .doOnNext { println(it) }
-        //Compose is called for every single subscriber. So if the function has state it will impact the produced values.
-        //It will produce BLUE-GREEN-PURPLE and then BLUE-GREEN-ORANGE
-        .compose(filterAndMap2)
+        val composedFlux = Flux.fromIterable(Arrays.asList("blue", "green", "orange", "purple"))
+            .doOnNext { println(it) }
+            //Compose is called for every single subscriber. So if the function has state it will impact the produced values.
+            //It will produce BLUE-GREEN-PURPLE and then BLUE-GREEN-ORANGE
+            .compose(filterAndMap2)
 //        .transform(filterAndMap2)
 
-    composedFlux.subscribe({ d -> println("Subscriber 1 to Composed MapAndFilter :$d") })
-    composedFlux.subscribe({ d -> println("Subscriber 2 to Composed MapAndFilter: $d") })
+        composedFlux.subscribe { d -> println("Subscriber 1 to Composed MapAndFilter :$d") }
+        composedFlux.subscribe { d -> println("Subscriber 2 to Composed MapAndFilter: $d") }
 
 
+        //Error handling
+        //TODO: Not clear for now
+        val atomicCounter = AtomicInteger(4)
+        Flux.range(1, 10)
+            .compose {
+                if (atomicCounter.incrementAndGet() == 5)
+                    return@compose Flux.error(RuntimeException())
+                else
+                    it
+            }
+            .onErrorResume {
+                println("Caught")
+                Flux.error(it)
+            }.subscribe { println("Consumed value: $it") }
+
+        //ConnectableFlux
+        val source = Flux.range(1, 3)
+            .doOnSubscribe { println("subscribed to source") }
+
+        val co = source.publish()
+
+        co.subscribe { println(it) }
+        co.subscribe { println(it) }
+
+        println("done subscribing")
+        Thread.sleep(500)
+        println("will now connect")
+
+        //Data emission will only start here. Without ConnectableFlux emission will start at .subscribe()
+        // and will likely be done with by the time you reach this code.
+//    co.connect();
+        val refCount = co.refCount(2)
+        refCount
+            //this will stop both subscribers
+//        .limitRequest(0)
+            .subscribe()
+        refCount.subscribe()
+
+        //Same thing but with autoconnect(n)
+        val autoCo = Flux.range(1, 3)
+            .doOnSubscribe { println("subscribed to source") }
+            .publish()
+            .autoConnect(2)
+
+        autoCo.subscribe { println(it) }
+        //Unless uncommented nothing happens
+//    autoCo.subscribe { println(it) }
+
+        println("done subscribing")
+        Thread.sleep(500)
+        println("will now connect")
+
+    }
+
+    
 }
 
 
