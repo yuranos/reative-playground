@@ -11,6 +11,7 @@ import reactor.core.scheduler.Schedulers
 import reactor.test.StepVerifier
 import reactor.test.publisher.PublisherProbe
 import reactor.test.publisher.TestPublisher
+import reactor.util.context.Context
 import java.io.IOException
 import java.time.Duration
 import java.util.*
@@ -402,9 +403,48 @@ fun main() {
             //IMPORTANT: Note also that subscribe(Subscriber<T>) merges all the rails, while subscribe(Consumer<T>) runs all the rails.
             .subscribe({ i -> println(Thread.currentThread().name + " -> " + i) })
 
-    }
+        //Contexts
+        val key = "message"
+        val r = Mono.just("Hello")
+            .flatMap { s ->
+                Mono.subscriberContext()
+                    .map { ctx -> s + " " + ctx.get(key) }
+            }
+            .subscriberContext { ctx -> ctx.put(key, "World") }
 
-    //Hooks
+        StepVerifier.create(r)
+            .expectNext("Hello World")
+            .verifyComplete()
+
+
+        Mono.just("One")
+            .subscriberContext(Context.of("One", "One"))
+            .map { "Two" }
+            .subscriberContext(Context.of("Two", "Two"))
+            .flatMap {
+                Mono.just("Three")
+            }
+            .subscriberContext(Context.of("Three", "Three"))
+            .subscribe {
+                Mono.subscriberContext().subscribe {
+                    //will throw anexception that the context is empty because it is populated form bottom to top.
+                    println(it[0] as String)
+                }
+            }
+    }
+    //Context immutability
+    val key = "message"
+
+    val r = Mono.subscriberContext()
+//        .subscriberContext(Context.of(key, "Hello"))
+        .map { ctx -> ctx.put(key, "Hello") }
+        .flatMap { Mono.subscriberContext() }
+        .map { ctx -> ctx.getOrDefault(key, "Default") }
+
+    StepVerifier.create(r)
+        .expectNext("Default")
+        .verifyComplete()
+
 
 }
 
