@@ -70,7 +70,7 @@ fun main() {
         }.subscribe { println("Still receiving. Got a new value: $it") }
             //But subscriber is not interested in the events any longer.
             //Only makes sense to use in async scenario. Otherwise, dispose() will not even be called
-            // because subscribe doesn't return untill the events are emitted.
+            // because subscribe doesn't return until the events are emitted.
             .dispose()
         println("I'm here")
 
